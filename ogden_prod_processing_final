@@ -1,1 +1,273 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov  1 09:19:00 2024
 
+Script Author:
+    Jasper Cantrell
+Data Source:
+    Ogden, P. J., Kelsic, E. D., Sinai, S., & Church, G. M. (2019). Comprehensive
+    AAV capsid fitness landscape reveals a viral gene and enables machine-guided
+    design. Science (New York, N.Y.), 366(6469), 1139–1143.
+    https://doi.org/10.1126/science.aaw2900
+
+The paper can be found on NCBI, along with its supplement. Process summary used
+by the paper can be found in the supplment.
+
+This script and the results from it should only be used for curiosity purposes.
+The original paper should be referenced if this script is referenced, and should
+be read by anyone interested in these results or capsid engineering.
+
+I appreciate the authors for releasing the data. It was a great way for me to
+learn and improve my data analytics. I wish them luck on their ventures!
+"""
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+
+### Load the data ###
+file_path = 'GSE139657_aav_packaging_all.csv'
+df = pd.read_csv(file_path)
+
+### Separate plasmid and virus samples ###
+
+df_wt_filt = df[df['is_wt_aa'] == 1].groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_wt_filt = df_wt_filt[['abs_pos', 'aa']]
+
+df_lib_filt = df[df['source'] == 'virus'].groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_lib_filt = df_lib_filt[['abs_pos', 'aa']]
+
+### Seperating out the replicates ###
+df_virus_r1 = df[(df['source'] == 'virus') & (df['virus_rep'] == 1)]
+df_virus_r2 = df[(df['source'] == 'virus') & (df['virus_rep'] == 2)]
+df_virus_r3 = df[(df['source'] == 'virus') & (df['virus_rep'] == 3)]
+df_virus_r4 = df[(df['source'] == 'virus') & (df['virus_rep'] == 4)]
+
+df_plasmid_cmv = df[(df['source'] == 'plasmid') & (df['promoter'] == 'CMV')]
+df_plasmid_rep = df[(df['source'] == 'plasmid') & (df['promoter'] == 'Rep')]
+
+###############################
+##### Standard Processing #####
+###############################
+
+### Summing packaging counts for each replicate ###
+df_virus_sum1 = df_virus_r1.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_virus_sum2 = df_virus_r2.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_virus_sum3 = df_virus_r3.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_virus_sum4 = df_virus_r4.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+
+df_plasmid_cmv_sum = df_plasmid_cmv.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+df_plasmid_rep_sum = df_plasmid_rep.groupby(['abs_pos', 'aa'])['count'].sum().reset_index()
+
+### Merging onto lib_filter to normalize index ###
+df_virus_sum1 = pd.merge(df_lib_filt, df_virus_sum1, on = ['abs_pos', 'aa'], how = 'left')
+df_virus_sum2 = pd.merge(df_lib_filt, df_virus_sum2, on = ['abs_pos', 'aa'], how = 'left')
+df_virus_sum3 = pd.merge(df_lib_filt, df_virus_sum3, on = ['abs_pos', 'aa'], how = 'left')
+df_virus_sum4 = pd.merge(df_lib_filt, df_virus_sum4, on = ['abs_pos', 'aa'], how = 'left')
+
+df_plasmid_cmv_sum = pd.merge(df_lib_filt, df_plasmid_cmv_sum, on = ['abs_pos', 'aa'], how = 'left')
+df_plasmid_rep_sum = pd.merge(df_lib_filt, df_plasmid_rep_sum, on = ['abs_pos', 'aa'], how = 'left')
+
+### Adding the Frequency for each replicate ###
+df_virus_sum1['frequency'] = df_virus_sum1['count'] / df_virus_sum1['count'].sum()
+df_virus_sum2['frequency'] = df_virus_sum2['count'] / df_virus_sum2['count'].sum()
+df_virus_sum3['frequency'] = df_virus_sum3['count'] / df_virus_sum3['count'].sum()
+df_virus_sum4['frequency'] = df_virus_sum4['count'] / df_virus_sum4['count'].sum()
+
+df_plasmid_cmv_sum['frequency'] = df_plasmid_cmv_sum['count'] / df_plasmid_cmv_sum['count'].sum()
+df_plasmid_rep_sum['frequency'] = df_plasmid_rep_sum['count'] / df_plasmid_rep_sum['count'].sum()
+
+### Adding the Selection parameter to each replicate ###
+df_virus_sum1['selection'] = df_virus_sum1['frequency'] / df_plasmid_cmv_sum['frequency']
+df_virus_sum2['selection'] = df_virus_sum2['frequency'] / df_plasmid_cmv_sum['frequency']
+df_virus_sum3['selection'] = df_virus_sum3['frequency'] / df_plasmid_rep_sum['frequency']
+df_virus_sum4['selection'] = df_virus_sum4['frequency'] / df_plasmid_rep_sum['frequency']
+
+### wt df separation ###
+df_virus_r1_wt = df_wt_filt.merge(df_virus_sum1, how = 'left')
+df_virus_r2_wt = df_wt_filt.merge(df_virus_sum2, how = 'left')
+df_virus_r3_wt = df_wt_filt.merge(df_virus_sum3, how = 'left')
+df_virus_r4_wt = df_wt_filt.merge(df_virus_sum4, how = 'left')
+
+### wt_selection values ###
+swt_r1 = df_virus_r1_wt['selection'].median()
+swt_r2 = df_virus_r2_wt['selection'].median()
+swt_r3 = df_virus_r3_wt['selection'].median()
+swt_r4 = df_virus_r4_wt['selection'].median()
+
+#### Adding normalized Selection ###
+df_virus_sum1['normalized_selection'] = df_virus_sum1['selection'] / swt_r1
+df_virus_sum2['normalized_selection'] = df_virus_sum2['selection'] / swt_r2
+df_virus_sum3['normalized_selection'] = df_virus_sum3['selection'] / swt_r3
+df_virus_sum4['normalized_selection'] = df_virus_sum4['selection'] / swt_r4
+
+### Merging CMV and REP ###
+df_virus_cmv_sum = pd.merge(df_virus_sum1, df_virus_sum2, on=['abs_pos','aa'], suffixes=['_r1', '_r2'])
+df_virus_cmv_sum['avg_norm_sel'] = df_virus_cmv_sum[['normalized_selection_r1','normalized_selection_r2']].mean(axis=1)
+
+df_virus_rep_sum = pd.merge(df_virus_sum3, df_virus_sum4, on=['abs_pos','aa'], suffixes=['_r3', '_r4'])
+df_virus_rep_sum['avg_norm_sel'] = df_virus_rep_sum[['normalized_selection_r3','normalized_selection_r4']].mean(axis=1)
+
+### Fit to full library abs_pos and aa ###
+
+df_virus_cmv_sum = pd.merge(df_lib_filt, df_virus_cmv_sum, on = ['abs_pos', 'aa'], how = 'left')
+df_virus_rep_sum = pd.merge(df_lib_filt, df_virus_rep_sum, on = ['abs_pos', 'aa'], how = 'left')
+
+### Export to .csv ###
+
+#df_virus_cmv_sum.to_csv('df_virus_cmv_sum.csv')
+#df_virus_rep_sum.to_csv('df_virus_rep_sum.csv')
+
+#################
+### swt stats ###
+#################
+
+r1_wt_stats = df_virus_r1_wt['selection'].describe()
+r2_wt_stats = df_virus_r2_wt['selection'].describe()
+r3_wt_stats = df_virus_r3_wt['selection'].describe()
+r4_wt_stats = df_virus_r4_wt['selection'].describe()
+
+r1_wt_cv = r1_wt_stats['std'] / r1_wt_stats['mean']
+r2_wt_cv = r2_wt_stats['std'] / r2_wt_stats['mean']
+r3_wt_cv = r3_wt_stats['std'] / r3_wt_stats['mean']
+r4_wt_cv = r4_wt_stats['std'] / r4_wt_stats['mean']
+
+print(r1_wt_stats)
+print(r2_wt_stats)
+print(r3_wt_stats)
+print(r4_wt_stats)
+
+print(r1_wt_cv)
+print(r2_wt_cv)
+print(r3_wt_cv)
+print(r4_wt_cv)
+
+#########################################################################
+##### Generating Statistics, and Identifying, and Counting Outliers #####
+#########################################################################
+
+### Generating Statistics and Outlier Thresholds ###
+
+r1_stats = df_virus_r1.groupby(['abs_pos', 'aa'])['count'].describe()
+r1_stats['IQR'] = r1_stats['75%'] - r1_stats['25%']
+r1_stats['upper_outlier_threshold'] = r1_stats['75%'] + 1.5*r1_stats['IQR']
+r1_stats['lower_outlier_threshold'] = r1_stats['25%'] - 1.5*r1_stats['IQR']
+
+r2_stats = df_virus_r2.groupby(['abs_pos', 'aa'])['count'].describe()
+r2_stats['IQR'] = r2_stats['75%'] - r2_stats['25%']
+r2_stats['upper_outlier_threshold'] = r2_stats['75%'] + 1.5*r2_stats['IQR']
+r2_stats['lower_outlier_threshold'] = r2_stats['25%'] - 1.5*r2_stats['IQR']
+
+r3_stats = df_virus_r3.groupby(['abs_pos', 'aa'])['count'].describe()
+r3_stats['IQR'] = r3_stats['75%'] - r3_stats['25%']
+r3_stats['upper_outlier_threshold'] = r3_stats['75%'] + 1.5*r3_stats['IQR']
+r3_stats['lower_outlier_threshold'] = r3_stats['25%'] - 1.5*r3_stats['IQR']
+
+r4_stats = df_virus_r4.groupby(['abs_pos', 'aa'])['count'].describe()
+r4_stats['IQR'] = r4_stats['75%'] - r4_stats['25%']
+r4_stats['upper_outlier_threshold'] = r4_stats['75%'] + 1.5*r4_stats['IQR']
+r4_stats['lower_outlier_threshold'] = r4_stats['25%'] - 1.5*r4_stats['IQR']
+
+pcmv_stats = df_plasmid_cmv.groupby(['abs_pos', 'aa'])['count'].describe()
+pcmv_stats['IQR'] = pcmv_stats['75%'] - pcmv_stats['25%']
+pcmv_stats['upper_outlier_threshold'] = pcmv_stats['75%'] + 1.5*pcmv_stats['IQR']
+pcmv_stats['lower_outlier_threshold'] = pcmv_stats['25%'] - 1.5*pcmv_stats['IQR']
+
+prep_stats = df_plasmid_rep.groupby(['abs_pos', 'aa'])['count'].describe()
+prep_stats['IQR'] = prep_stats['75%'] - prep_stats['25%']
+prep_stats['upper_outlier_threshold'] = prep_stats['75%'] + 1.5*prep_stats['IQR']
+prep_stats['lower_outlier_threshold'] = prep_stats['25%'] - 1.5*prep_stats['IQR']
+
+### Merging outlier thresholds into dataframes and labeling outliers ###
+
+df_virus_r1 = pd.merge(df_virus_r1, r1_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_virus_r1['upper_outlier'] = df_virus_r1['count'] > df_virus_r1['upper_outlier_threshold']
+df_virus_r1['lower_outlier'] = df_virus_r1['count'] < df_virus_r1['lower_outlier_threshold']
+
+df_virus_r2 = pd.merge(df_virus_r2, r2_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_virus_r2['upper_outlier'] = df_virus_r2['count'] > df_virus_r2['upper_outlier_threshold']
+df_virus_r2['lower_outlier'] = df_virus_r2['count'] < df_virus_r2['lower_outlier_threshold']
+
+df_virus_r3 = pd.merge(df_virus_r3, r3_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_virus_r3['upper_outlier'] = df_virus_r3['count'] > df_virus_r3['upper_outlier_threshold']
+df_virus_r3['lower_outlier'] = df_virus_r3['count'] < df_virus_r3['lower_outlier_threshold']
+
+df_virus_r4 = pd.merge(df_virus_r4, r4_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_virus_r4['upper_outlier'] = df_virus_r4['count'] > df_virus_r4['upper_outlier_threshold']
+df_virus_r4['lower_outlier'] = df_virus_r4['count'] < df_virus_r4['lower_outlier_threshold']
+
+df_plasmid_cmv = pd.merge(df_plasmid_cmv, pcmv_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_plasmid_cmv['upper_outlier'] = df_plasmid_cmv['count'] > df_plasmid_cmv['upper_outlier_threshold']
+df_plasmid_cmv['lower_outlier'] = df_plasmid_cmv['count'] < df_plasmid_cmv['lower_outlier_threshold']
+
+df_plasmid_rep = pd.merge(df_plasmid_rep, prep_stats[['upper_outlier_threshold', 'lower_outlier_threshold']], on=['abs_pos', 'aa'])
+df_plasmid_rep['upper_outlier'] = df_plasmid_rep['count'] > df_plasmid_rep['upper_outlier_threshold']
+df_plasmid_rep['lower_outlier'] = df_plasmid_rep['count'] < df_plasmid_rep['lower_outlier_threshold']
+
+### Separating Outliers ###
+
+df_outliers_r1 = df_virus_r1[(df_virus_r1['upper_outlier'] == True) | (df_virus_r1['lower_outlier'] == True)]
+df_outliers_r2 = df_virus_r2[(df_virus_r2['upper_outlier'] == True) | (df_virus_r2['lower_outlier'] == True)]
+df_outliers_r3 = df_virus_r3[(df_virus_r3['upper_outlier'] == True) | (df_virus_r3['lower_outlier'] == True)]
+df_outliers_r4 = df_virus_r4[(df_virus_r4['upper_outlier'] == True) | (df_virus_r4['lower_outlier'] == True)]
+
+df_outliers_pcmv = df_plasmid_cmv[(df_plasmid_cmv['upper_outlier'] == True) | (df_plasmid_cmv['lower_outlier'] == True)]
+df_outliers_prep = df_plasmid_rep[(df_plasmid_rep['upper_outlier'] == True) | (df_plasmid_rep['lower_outlier'] == True)]
+
+### Counting Outliers ###
+
+print("outlier stats")
+print(df_virus_r1.info())
+print(df_virus_r2.info())
+print(df_virus_r3.info())
+print(df_virus_r4.info())
+print(df_outliers_r1[['abs_pos', 'aa']].value_counts())
+print(df_outliers_r2[['abs_pos', 'aa']].value_counts())
+print(df_outliers_r3[['abs_pos', 'aa']].value_counts())
+print(df_outliers_r4[['abs_pos', 'aa']].value_counts())
+
+print(df_outliers_pcmv[['abs_pos', 'aa']].value_counts())
+print(df_outliers_prep[['abs_pos', 'aa']].value_counts())
+
+##########################
+### Summary of Results ###
+##########################
+
+"""
+In this script, the processing proceeded as per the original processing described
+in the paper's supplement. In summary, each of the viral production replicates
+was separated by the 'virus_rep' column and the 'source' column in the packaging
+dataframe. Replicates 1 and 2 correspond to the library using the CMV promoter,
+and replicates 3 and 4 correspond to the library with the REP promoter. Plasmid
+and viral productions were separated by 'plasmid' or 'virus' values under the
+'source' column. A similar separation was done on the plasmids, using instead
+the 'promoter' and 'source' columns. The two promoter libraries were separated
+by either 'CMV' or 'REP'
+
+Each dataframe was then grouped by 'abs_pos' and 'aa', summing all 'count's for
+each grouped row. This dataframe was then merged onto the lib_filter, containing
+all abs_pos-aa pairs. Empty fields were filled in as null. A normalized value
+called 'frequency' for each abs_pos-aa pair was generated by dividing the grouped
+'count' sum by the total 'count' column. Here, the frequency value for each viral
+replicate was divided by the corresponding plasmid value depending on the replicate's
+promoter. This 'selection' column accounts for imbalances in the frequency of the
+plasmid library.
+
+A normalized selection value relative to wild-type was generated by filtering
+out 21 wt positions and retrieving the median selection values. All selection
+values were then divided by the individual replicate's median to generate the
+normalized value. The mean of the replicates for each promoter library was retrieved
+by merging the two replicates into a new dataframe and calculating into a new
+column.
+
+As a measure of quality assurance, two extra steps were taken. First, statistics
+for the wild-type selection values were taken. Each viral replicate's variance,
+as measured by std and IQR. Second, outliers were identified and counted. None
+of the replicates had a concerning variance from each other. The percent of
+outliers were all 5% or below if the total values for the viral replicates. Only
+virus replicate 4, a duplicate of the REP library, went to 5.05%.
+
+df_virus_cmv_sum and df_virus_rep_sum were exported into .csv files for further
+processing and analytics.
+"""
